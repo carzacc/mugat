@@ -19,7 +19,7 @@ from tqdm import tqdm
 from nougat import NougatModel
 from nougat.metrics import compute_metrics
 from nougat.utils.checkpoint import get_checkpoint
-from nougat.utils.dataset import NougatDataset
+from nougat.utils.dataset import ThreePageDataset
 from nougat.utils.device import move_to_device
 from lightning_module import NougatDataPLModule
 
@@ -37,7 +37,7 @@ def test(args):
     predictions = []
     ground_truths = []
     metrics = defaultdict(list)
-    dataset = NougatDataset(
+    dataset = ThreePageDataset(
         dataset_path=args.dataset,
         nougat_model=pretrained_model,
         max_length=pretrained_model.config.max_length,

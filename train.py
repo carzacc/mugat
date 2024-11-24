@@ -24,7 +24,7 @@ from lightning.pytorch.plugins.environments import SLURMEnvironment
 from lightning.pytorch.utilities import rank_zero_only
 from sconf import Config
 
-from nougat import NougatDataset
+from nougat import ThreePageDataset
 from lightning_module import NougatDataPLModule, NougatModelPLModule
 
 try:
@@ -149,7 +149,7 @@ def train(config):
     for i, dataset_path in enumerate(config.dataset_paths):
         for split in ["train", "validation"]:
             datasets[split].append(
-                NougatDataset(
+                ThreePageDataset(
                     dataset_path=dataset_path,
                     nougat_model=model_module.model,
                     max_length=config.max_length,

@@ -7,19 +7,17 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 import logging
 import math
 import os
-import nougat.adapter as adapter
 from typing import List, Optional, Union
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import cv2
 import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from PIL import ImageOps
 from timm.models.swin_transformer import SwinTransformer
 from torchvision.transforms.functional import resize, rotate
 from transformers import (
@@ -29,11 +27,12 @@ from transformers import (
     MBartConfig,
     # MBartForCausalLM,
 )
-from .modeling_mbart import MBartForCausalLM
 from transformers.file_utils import ModelOutput
 from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
 from nougat.postprocessing import postprocess
 from nougat.transforms import train_transform, test_transform
+
+from .modeling_mbart import MBartForCausalLM
 
 
 class SwinEncoder(nn.Module):
@@ -527,10 +526,6 @@ class NougatModel(PreTrainedModel):
         for param in self.encoder.model.parameters():
             param.requires_grad = False 
         
-        self.adapter = adapter.PerceiverAdapter(num_layers=config.adapter_layers, extra_tokens=config.adapter_tokens)
-        self.adapter.train()
-        self.adapter = self.adapter.to(torch.float)
-
         self.decoder = BARTDecoder(
             max_position_embeddings=self.config.max_position_embeddings,
             decoder_layer=self.config.decoder_layer,
@@ -576,14 +571,10 @@ class NougatModel(PreTrainedModel):
             else:
                 encoder_out_next = torch.zeros(encoder_outputs.shape, device=encoder_outputs.device)
         
-        adapter_outs = self.adapter(
-            torch.cat(
+        decoder_inputs = torch.cat(
                 (encoder_out_prev, encoder_outputs, encoder_out_next),
                 dim=1
             )
-        )
-
-        decoder_inputs = torch.cat((encoder_outputs, adapter_outs), dim=1)
 
  #       attn_mask=torch.cat((attention_mask[:, :-1]), device=attention_mask.device)), dim=1)
 
@@ -661,14 +652,8 @@ class NougatModel(PreTrainedModel):
             (last_hidden_state_prev, last_hidden_state, last_hidden_state_next),
             dim=1
         )
-        
-        adapter_outs = self.adapter(
-            adapter_inputs   
-        )
 
-        last_hidden_state = torch.cat(
-            (last_hidden_state, adapter_outs), dim=1
-        )
+        last_hidden_state = adapter_inputs
 
         encoder_outputs = ModelOutput(
             last_hidden_state=last_hidden_state, attentions=None
