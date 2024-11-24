@@ -173,7 +173,7 @@ def train(config):
     trainer = pl.Trainer(
         num_nodes=config.get("num_nodes", 1),
         devices="auto",
-        strategy="ddp_find_unused_parameters_true",
+        #strategy="ddp_find_unused_parameters_true",
         accelerator="auto",
         # plugins=[SLURMEnvironment(auto_requeue=False)],
         max_epochs=config.max_epochs,

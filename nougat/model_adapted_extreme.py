@@ -33,6 +33,7 @@ from nougat.postprocessing import postprocess
 from nougat.transforms import train_transform, test_transform
 
 from .modeling_mbart import MBartForCausalLM
+from multipage_embeddings import MultipageEmbeddings
 
 
 class SwinEncoder(nn.Module):
@@ -401,9 +402,7 @@ class NougatConfig(PretrainedConfig):
         embed_dim: int = 128,
         num_heads: List[int] = [4, 8, 16, 32],
         hidden_dimension: int = 1024,
-        empty_sample="/home/carmine/gits/mugat/whitepage.pt",
-        adapter_layers = 2,
-        adapter_tokens = 4,
+        empty_sample="/work/tesi_czaccagnino/nougat_white/whitepage.pt",
         **kwargs,
     ):
         super().__init__()
@@ -422,8 +421,6 @@ class NougatConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.hidden_dimension = hidden_dimension
         self.empty_sample = empty_sample
-        self.adapter_layers = adapter_layers
-        self.adapter_tokens = adapter_tokens
 
 
 class RunningVarTorch:
@@ -536,11 +533,19 @@ class NougatModel(PreTrainedModel):
 
         self.empty_sample = torch.load(self.config.empty_sample) if self.config.empty_sample is not None else None
 
+        SWIN_EMBEDDING_TOKEN_COUNT = 588
+        SWIN_EMBEDDING_TOKEN_SIZE = 1024
+        
+        self.multipage_embeddings = MultipageEmbeddings(
+            max_page_count=self.config.max_pages,
+            embedding_size=SWIN_EMBEDDING_TOKEN_SIZE,
+            tokens_per_page=SWIN_EMBEDDING_TOKEN_COUNT
+        )
+
+
     def forward(
         self,
         image_tensors: torch.Tensor,
-        prev_image_tensors: Optional[torch.Tensor],
-        next_image_tensors: Optional[torch.Tensor],
         decoder_input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ):
@@ -552,29 +557,14 @@ class NougatModel(PreTrainedModel):
             image_tensors: (batch_size, num_channels, height, width)
             decoder_input_ids: (batch_size, sequence_length, embedding_dim)
         """
-
+        
+        # all in one encoder batch
         encoder_outputs = self.encoder(image_tensors)
         
-        if prev_image_tensors.max() != 0:
-            encoder_out_prev = self.encoder(prev_image_tensors)
-        else:
-            if self.empty_sample is not None:
-                encoder_out_prev = self.empty_sample.to(encoder_outputs.device)
-            else:
-                encoder_out_prev = torch.zeros(encoder_outputs.shape, device=encoder_outputs.device)
         
-        if next_image_tensors.max() != 0:
-            encoder_out_next = self.encoder(next_image_tensors)
-        else:
-            if self.empty_sample is not None:
-                encoder_out_next = self.empty_sample.to(encoder_outputs.device)
-            else:
-                encoder_out_next = torch.zeros(encoder_outputs.shape, device=encoder_outputs.device)
-        
-        decoder_inputs = torch.cat(
-                (encoder_out_prev, encoder_outputs, encoder_out_next),
-                dim=1
-            )
+        decoder_inputs = encoder_outputs.reshape(-1, 1024).unsqueeze(0)
+
+        decoder_inputs = self.multipage_embeddings(decoder_inputs)
 
  #       attn_mask=torch.cat((attention_mask[:, :-1]), device=attention_mask.device)), dim=1)
 
@@ -625,38 +615,18 @@ class NougatModel(PreTrainedModel):
         image_tensors = image_tensors.to(self.device)
         last_hidden_state = self.encoder(image_tensors)
 
-        # When no previous/next image is available, a tensor of zeroes
-        # will end up in prev_image_tensors and next_image_tensors
-        if torch.linalg.vector_norm(prev_image_tensors) != 0:
-            prev_image_tensors = prev_image_tensors.to(self.device)
-            last_hidden_state_prev = self.encoder(prev_image_tensors)
-        else:
-            if self.empty_sample is not None:
-                last_hidden_state_prev = self.empty_sample.to(last_hidden_state.device)
-            else:
-                last_hidden_state_prev = torch.zeros(last_hidden_state.shape, device=last_hidden_state.device)
+        encoder_outputs = self.encoder(image_tensors)
         
-        if torch.linalg.vector_norm(next_image_tensors) != 0:
-            next_image_tensors = next_image_tensors.to(self.device)
-            last_hidden_state_next = self.encoder(next_image_tensors)
-        else:
-            if self.empty_sample is not None:
-                last_hidden_state_next = self.empty_sample.to(last_hidden_state.device)
-            else:
-                last_hidden_state_next = torch.zeros(last_hidden_state.shape, device=last_hidden_state.device)
+        
+        decoder_inputs = encoder_outputs.reshape(-1, 1024).unsqueeze(0)
 
+        decoder_inputs = self.multipage_embeddings(decoder_inputs)
         # to manage to run on 8GB VRAM
         # last_hidden_state_next=last_hidden_state
 
-        adapter_inputs = torch.cat(
-            (last_hidden_state_prev, last_hidden_state, last_hidden_state_next),
-            dim=1
-        )
-
-        last_hidden_state = adapter_inputs
 
         encoder_outputs = ModelOutput(
-            last_hidden_state=last_hidden_state, attentions=None
+            last_hidden_state=decoder_inputs, attentions=None
         )
 
         if len(encoder_outputs.last_hidden_state.size()) == 1:
