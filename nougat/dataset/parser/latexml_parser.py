@@ -291,7 +291,8 @@ def parse_latexml_children(html: BeautifulSoup, parent: Element) -> None:
                 parse_latexml_children(child, parent)
         elif sv.match(".ltx_eqn_cell", child):
             parse_latexml_children(child, parent)
-        elif sv.match("table, span.ltx_tabular, div.ltx_tabular", child):
+        # valutare se longtable gestita così va bene
+        elif sv.match("table, span.ltx_tabular, div.ltx_tabular, div.ltx_longtable, span.ltx_longtable", child):
             tabular = parent.append(Tabular())
             parse_latexml_children(child, tabular)
         elif sv.match("thead.ltx_thead", child):

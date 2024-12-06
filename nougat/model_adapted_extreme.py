@@ -33,7 +33,7 @@ from nougat.postprocessing import postprocess
 from nougat.transforms import train_transform, test_transform
 
 from .modeling_mbart import MBartForCausalLM
-from multipage_embeddings import MultipageEmbeddings
+from nougat.multipage_embeddings import MultipageEmbeddings
 
 
 class SwinEncoder(nn.Module):
@@ -403,6 +403,7 @@ class NougatConfig(PretrainedConfig):
         num_heads: List[int] = [4, 8, 16, 32],
         hidden_dimension: int = 1024,
         empty_sample="/work/tesi_czaccagnino/nougat_white/whitepage.pt",
+        max_pages=40,
         **kwargs,
     ):
         super().__init__()
@@ -421,6 +422,7 @@ class NougatConfig(PretrainedConfig):
         self.num_heads = num_heads
         self.hidden_dimension = hidden_dimension
         self.empty_sample = empty_sample
+        self.max_pages = max_pages
 
 
 class RunningVarTorch:
@@ -583,8 +585,6 @@ class NougatModel(PreTrainedModel):
         self,
         image: Image.Image = None,
         image_tensors: Optional[torch.Tensor] = None,
-        prev_image_tensors: Optional[torch.Tensor] = None,
-        next_image_tensors: Optional[torch.Tensor] = None,
         return_attentions: bool = False,
         early_stopping: bool = True,
     ):

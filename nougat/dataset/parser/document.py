@@ -696,6 +696,101 @@ class Tabular(Element):
     def plaintext(self):
         return "\n".join([row.plaintext for row in self.rows])
 
+@dataclass
+class LongTable(Element):
+    rows: List[TableRow] = field(default_factory=list)
+    """
+    Represents a multi-page tabular structure
+
+    Attributes:
+        rows (List[TableRow]): The list of rows in the tabular structure.
+
+    Methods:
+        add_row(row: TableRow) -> TableRow: Add a row to the tabular structure.
+        width() -> int: Get the maximum width of the tabular structure.
+        cols() -> List[List[TableCell]]: Get a list of columns in the tabular structure.
+        _square_table() -> None: Ensure the table has an equal number of columns in each row.
+        get_table_spec() -> str: Generate a LaTeX table specification based on cell alignments.
+        plaintext() -> str: Get the plaintext content of the tabular structure.
+    """
+
+    def add_row(self, row: TableRow) -> TableRow:
+        self.rows.append(row)
+        row.parent = self
+        return row
+
+    @property
+    def width(self) -> int:
+        if len(self.rows) > 0:
+            return max([r.width for r in self.rows])
+        else:
+            return 0
+
+    @property
+    def cols(self) -> List[List[TableCell]]:
+        return list(
+            map(
+                list,
+                itertools.zip_longest(*[r.cells for r in self.rows], fillvalue=None),
+            )
+        )
+
+    def _square_table(self) -> None:
+        """check if number of columns is equal for every row. Add placeholders for `\multirow` instances"""
+        for i, row in enumerate(self.rows):
+            for j, cell in enumerate(row.cells):
+                if cell.multirow is not None and cell.multirow > 1:
+                    spec = copy(cell.spec)
+                    # assume no hlines in multi cells: disable bottom lines for top and top lines for lower cells.
+                    spec.t = 0
+                    cell.spec.b = 0
+                    for k in range(i + 1, i + cell.multirow):
+                        if k < len(self.rows):
+                            for _ in range(row.cell_widths[j]):
+                                # add empty cell
+                                self.rows[k].cells.insert(
+                                    j, TableCell(parent=self.rows[k], spec=spec)
+                                )
+
+    def get_table_spec(self) -> str:
+        """Generates a LaTeX table spec."""
+        # First make table square
+        self._square_table()
+        # Find the most used spec in regular cells (no multi-col/row)
+        specs = [Spec() for _ in range(self.width)]
+        for i, col in enumerate(self.cols):
+            counts = defaultdict(int)
+            for cell in col:
+                if cell is None or cell.spec.align == "":
+                    continue
+                if cell.multicolumn is None and cell.multirow is None:
+                    counts[cell.spec] += 1
+            if len(counts) > 0:
+                specs[i] = max(counts, key=counts.get)
+        # convert all cells that don't match the column style into a multicol{1}{custom_spec}
+        for i, col in enumerate(self.cols):
+            for cell in col:
+                if cell is not None and cell.spec != specs[i]:
+                    # check if there is text in the cell. If not alignment doesn't matter
+                    if (
+                        len(cell.children) == 0
+                        and cell.spec.l == specs[i].l
+                        and cell.spec.r == specs[i].r
+                    ):
+                        continue
+                    # convert any standard cell into a multicol cell of width 1
+                    if cell.multicolumn is None:
+                        cell.multicolumn = 1
+        # generate final latex table spec
+        out = " ".join([str(spec) for spec in specs])
+        out = re.sub(r"(\|) +(\w)", r"\1\2", out)
+        out = re.sub(r"(\w) +(\|)", r"\1\2", out)
+        return out
+
+    @property
+    def plaintext(self):
+        return "\n".join([row.plaintext for row in self.rows])
+
 
 @dataclass
 class Table(Element):
