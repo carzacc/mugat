@@ -1,4 +1,4 @@
-resume_from_checkpoint_path: null
+resume_from_checkpoint_path: "/work/tesi_czaccagnino/result/multi-threepage/20241206_083205/last.ckpt"
 result_path: "result"
 model_path: "/homes/czaccagnino/.cache/torch/hub/nougat-0.1.0-base/"
 dataset_paths: ["/work/tesi_czaccagnino/arxiv-dataset/split/train.jsonl"]
@@ -7,10 +7,10 @@ exp_name: "multi-threepage"
 train_batch_sizes: [1]
 num_workers: 8
 val_batch_sizes: [1]
-val_batches: 1
+val_batches: 16
 input_size: [896, 672]
-max_length: 4096
-max_position_embeddings: 4096
+max_length: 40960
+max_position_embeddings: 40960
 accumulate_grad_batches: 3
 window_size: 7
 patch_size: 4
@@ -31,7 +31,7 @@ num_training_samples_per_epoch: 10000
 max_epochs: 200
 max_steps: -1
 val_check_interval: null
-check_val_every_n_epoch: 1
+check_val_every_n_epoch: 5
 gradient_clip_val: 0.5
 verbose: False
 max_pages: 30

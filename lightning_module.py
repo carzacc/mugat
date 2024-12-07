@@ -82,10 +82,17 @@ class NougatModelPLModule(pl.LightningModule):
 
         self.model.decoder.gradient_checkpointing = True
         self.model.decoder.training = True
+        pages = []
 
-        model_input = torch.cat([
-            prev_image_tensors, image_tensors, next_image_tensors
-        ])
+        if torch.linalg.vector_norm(prev_image_tensors) != 0:
+            pages.append(prev_image_tensors)
+
+        pages.append(image_tensors)
+
+        if torch.linalg.vector_norm(next_image_tensors) != 0:
+            pages.append(next_image_tensors)
+
+        model_input = torch.cat(pages)
 
         
         loss = self.model(
@@ -108,9 +115,18 @@ class NougatModelPLModule(pl.LightningModule):
             batch_first=True,
         )
 
-        model_input = torch.cat([
-            prev_image_tensors, image_tensors, next_image_tensors
-        ])
+        pages = []
+
+        if torch.linalg.vector_norm(prev_image_tensors) != 0:
+            pages.append(prev_image_tensors)
+
+        pages.append(image_tensors)
+
+        if torch.linalg.vector_norm(next_image_tensors) != 0:
+            pages.append(next_image_tensors)
+
+        model_input = torch.cat(pages)
+        
         self.model.gradient_checkpointing = False
         self.model.training = False
         preds = self.model.inference(
